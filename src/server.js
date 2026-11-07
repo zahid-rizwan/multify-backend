@@ -3,7 +3,7 @@ const cors = require('cors');
 const path = require('path');
 const dotenv = require('dotenv');
 const mongoose = require('mongoose');
-const connectDB = require('./config/db');
+const { connectDB, getConnectionDetails } = require('./config/db');
 
 // Load environment variables
 dotenv.config();
@@ -31,20 +31,25 @@ app.use(express.urlencoded({ extended: true }));
 // Serve static uploaded files (PDFs)
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-// Health check endpoint
+// Health check endpoint with live database diagnosis
 app.get('/api/health', (req, res) => {
   const dbState = mongoose.connection.readyState;
   const states = { 0: 'disconnected', 1: 'connected', 2: 'connecting', 3: 'disconnecting' };
+  const details = getConnectionDetails();
+
   res.json({
     status: dbState === 1 ? 'healthy' : 'degraded',
     database: {
       state: states[dbState] || 'unknown',
       connected: dbState === 1,
+      hasEnvUri: details.hasEnvUri,
+      target: details.attemptedUri,
+      error: details.lastError,
       host: mongoose.connection.host || null,
       name: mongoose.connection.name || null,
     },
     project: 'MLTify Backend API',
-    version: '1.0.0',
+    version: '1.0.1',
     timestamp: new Date().toISOString(),
   });
 });
@@ -55,10 +60,13 @@ app.use('/api', (req, res, next) => {
   if (req.path === '/health') return next();
 
   if (mongoose.connection.readyState === 0) {
+    const details = getConnectionDetails();
     return res.status(503).json({
       success: false,
       message: 'Database connection is offline.',
-      error: 'Cannot reach MongoDB cluster. Please verify your MONGODB_URI and check that MongoDB Atlas Network Access allows 0.0.0.0/0 (Access from Anywhere).',
+      reason: details.lastError || 'Cannot connect to MongoDB cluster.',
+      hasEnvConfigured: details.hasEnvUri,
+      targetAttempted: details.attemptedUri,
     });
   }
   next();

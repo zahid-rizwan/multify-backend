@@ -9,6 +9,8 @@ try {
 }
 
 let isConnected = false;
+let lastError = null;
+let connectionAttemptedUri = null;
 
 const normalizeMongoUri = (uri) => {
   if (!uri) return 'mongodb://127.0.0.1:27017/mltify';
@@ -23,7 +25,9 @@ const normalizeMongoUri = (uri) => {
 };
 
 const connectDB = async () => {
-  const uri = normalizeMongoUri(process.env.MONGODB_URI);
+  const rawUri = process.env.MONGODB_URI;
+  const uri = normalizeMongoUri(rawUri);
+  connectionAttemptedUri = uri.replace(/:([^@]+)@/, ':****@');
 
   try {
     const conn = await mongoose.connect(uri, {
@@ -32,16 +36,15 @@ const connectDB = async () => {
     });
 
     isConnected = true;
+    lastError = null;
     console.log(`[MLTify] ✅ MongoDB Connected: ${conn.connection.host}`);
     return true;
   } catch (error) {
     isConnected = false;
+    lastError = error.message;
     console.error(`\n❌ [MLTify Error] Failed to connect to MongoDB!`);
     console.error(`Reason: ${error.message}`);
-    console.error(`Target URI: ${uri.replace(/:([^@]+)@/, ':****@')}`);
-    console.error(`\n👉 Common production fixes:`);
-    console.error(`1. Check MongoDB Atlas "Network Access" -> Allow 0.0.0.0/0 (Access from Anywhere)`);
-    console.error(`2. Ensure MONGODB_URI environment variable is configured in your production hosting panel\n`);
+    console.error(`Target URI: ${connectionAttemptedUri}`);
     return false;
   }
 };
@@ -53,7 +56,15 @@ mongoose.connection.on('disconnected', () => {
 
 mongoose.connection.on('reconnected', () => {
   isConnected = true;
+  lastError = null;
   console.log('[MLTify] ✅ MongoDB reconnected.');
 });
 
-module.exports = connectDB;
+const getConnectionDetails = () => ({
+  isConnected,
+  lastError,
+  hasEnvUri: Boolean(process.env.MONGODB_URI),
+  attemptedUri: connectionAttemptedUri,
+});
+
+module.exports = { connectDB, getConnectionDetails };
