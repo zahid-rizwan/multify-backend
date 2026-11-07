@@ -6,6 +6,7 @@ const {
   getResources,
   getResourceById,
   downloadResource,
+  streamPdf,
   uploadResource,
   updateResource,
   deleteResource,
@@ -14,6 +15,7 @@ const {
 // Public routes
 router.get('/', getResources);
 router.get('/:id', getResourceById);
+router.get('/:id/pdf', streamPdf);
 router.get('/:id/download', downloadResource);
 
 // Admin protected routes

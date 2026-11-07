@@ -135,7 +135,7 @@ exports.getResourceById = async (req, res) => {
 // @access  Public
 exports.downloadResource = async (req, res) => {
   try {
-    const resource = await Resource.findById(req.params.id);
+    const resource = await Resource.findById(req.params.id).select('+fileData');
 
     if (!resource) {
       return res.status(404).json({
@@ -144,25 +144,94 @@ exports.downloadResource = async (req, res) => {
       });
     }
 
-    const filePath = path.join(__dirname, '../../uploads/pdfs', resource.fileName);
+    // Increment download count asynchronously
+    Resource.findByIdAndUpdate(req.params.id, { $inc: { downloadCount: 1 } }).exec();
 
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({
-        success: false,
-        message: 'The requested PDF file does not exist on server storage',
-      });
+    const downloadFileName = resource.originalFileName || `${resource.title}.pdf`;
+
+    // 1. If PDF is stored directly in MongoDB buffer
+    if (resource.fileData && resource.fileData.length > 0) {
+      res.setHeader('Content-Type', resource.mimeType || 'application/pdf');
+      res.setHeader('Content-Length', resource.fileData.length);
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${encodeURIComponent(downloadFileName)}"`
+      );
+      return res.send(resource.fileData);
     }
 
-    // Increment download count
-    resource.downloadCount += 1;
-    await resource.save();
+    // 2. Fallback for files saved on disk
+    if (resource.fileName) {
+      const filePath = path.join(__dirname, '../../uploads/pdfs', resource.fileName);
+      if (fs.existsSync(filePath)) {
+        return res.download(filePath, downloadFileName);
+      }
+    }
 
-    // Stream download with friendly filename
-    res.download(filePath, resource.originalFileName || `${resource.title}.pdf`);
+    return res.status(404).json({
+      success: false,
+      message: 'The requested PDF file does not exist on server storage or database',
+    });
   } catch (error) {
     res.status(500).json({
       success: false,
       message: 'Download error',
+      error: error.message,
+    });
+  }
+};
+
+// @desc    Stream PDF inline for in-browser viewer/modal
+// @route   GET /api/resources/:id/pdf
+// @access  Public
+exports.streamPdf = async (req, res) => {
+  try {
+    const resource = await Resource.findById(req.params.id).select('+fileData');
+
+    if (!resource) {
+      return res.status(404).json({
+        success: false,
+        message: 'Resource not found',
+      });
+    }
+
+    // Increment view count asynchronously
+    Resource.findByIdAndUpdate(req.params.id, { $inc: { viewCount: 1 } }).exec();
+
+    const viewFileName = resource.originalFileName || `${resource.title}.pdf`;
+
+    // 1. If PDF is stored in MongoDB buffer
+    if (resource.fileData && resource.fileData.length > 0) {
+      res.setHeader('Content-Type', resource.mimeType || 'application/pdf');
+      res.setHeader('Content-Length', resource.fileData.length);
+      res.setHeader(
+        'Content-Disposition',
+        `inline; filename="${encodeURIComponent(viewFileName)}"`
+      );
+      return res.send(resource.fileData);
+    }
+
+    // 2. Fallback to disk
+    if (resource.fileName) {
+      const filePath = path.join(__dirname, '../../uploads/pdfs', resource.fileName);
+      if (fs.existsSync(filePath)) {
+        res.setHeader('Content-Type', resource.mimeType || 'application/pdf');
+        res.setHeader(
+          'Content-Disposition',
+          `inline; filename="${encodeURIComponent(viewFileName)}"`
+        );
+        return res.sendFile(filePath);
+      }
+    }
+
+    return res.status(404).json({
+      success: false,
+      message: 'PDF file content could not be located on server or database',
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error streaming PDF file',
       error: error.message,
     });
   }
@@ -192,10 +261,6 @@ exports.uploadResource = async (req, res) => {
     } = req.body;
 
     if (!title || !subject || !docType || !semester || !year) {
-      // Remove uploaded file if validation fails
-      if (req.file && fs.existsSync(req.file.path)) {
-        fs.unlinkSync(req.file.path);
-      }
       return res.status(400).json({
         success: false,
         message: 'Please provide Title, Subject, Document Type (PYQ/NOTE), Semester, and Year.',
@@ -205,9 +270,6 @@ exports.uploadResource = async (req, res) => {
     // Verify subject exists
     const subjectExists = await Subject.findById(subject);
     if (!subjectExists) {
-      if (req.file && fs.existsSync(req.file.path)) {
-        fs.unlinkSync(req.file.path);
-      }
       return res.status(400).json({
         success: false,
         message: 'Specified subject does not exist',
@@ -224,9 +286,15 @@ exports.uploadResource = async (req, res) => {
       }
     }
 
-    const fileUrl = `/uploads/pdfs/${req.file.filename}`;
+    // Clean filename for storage
+    const cleanOriginalName = (req.file.originalname || 'document.pdf').replace(/[^a-zA-Z0-9.-]/g, '_');
+    const safeFileName = `${Date.now()}-${Math.round(Math.random() * 1e9)}-${cleanOriginalName}`;
 
-    const newResource = await Resource.create({
+    // Get buffer and size
+    const fileBuffer = req.file.buffer;
+    const fileSize = req.file.size || (fileBuffer ? fileBuffer.length : 0);
+
+    const newResource = new Resource({
       title,
       subject,
       docType: docType.toUpperCase(),
@@ -235,13 +303,17 @@ exports.uploadResource = async (req, res) => {
       session: session || 'Annual Exam',
       description: description || '',
       tags: parsedTags,
-      fileUrl,
-      fileName: req.file.filename,
-      originalFileName: req.file.originalname,
-      fileSize: req.file.size,
-      mimeType: req.file.mimetype,
+      fileName: req.file.filename || safeFileName,
+      originalFileName: req.file.originalname || 'document.pdf',
+      fileSize: fileSize,
+      mimeType: req.file.mimetype || 'application/pdf',
+      fileData: fileBuffer, // Stored safely in MongoDB Atlas!
       status: 'published',
     });
+
+    // Stream URL pointing directly to serverless streaming endpoint
+    newResource.fileUrl = `/api/resources/${newResource._id}/pdf`;
+    await newResource.save();
 
     const populatedResource = await Resource.findById(newResource._id).populate(
       'subject',
@@ -254,9 +326,6 @@ exports.uploadResource = async (req, res) => {
       data: populatedResource,
     });
   } catch (error) {
-    if (req.file && fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path);
-    }
     res.status(500).json({
       success: false,
       message: 'Failed to upload resource',

@@ -43,6 +43,10 @@ const resourceSchema = new mongoose.Schema(
       type: String,
       required: [true, 'PDF file URL/path is required'],
     },
+    fileData: {
+      type: Buffer,
+      select: false, // Don't return binary buffer in large resource queries
+    },
     fileName: {
       type: String,
       required: true,
