@@ -137,17 +137,28 @@ app.get('/api/test-db', async (req, res) => {
   }
 });
 
-// Middleware to prevent buffering timeouts when database is not connected
-app.use('/api', (req, res, next) => {
+// Middleware to ensure DB connection before executing any API route (crucial for Serverless / Lambda)
+app.use('/api', async (req, res, next) => {
   // Allow diagnostic endpoints regardless of DB status
-  if (req.path === '/health' || req.path === '/test-port' || req.path === '/test-db') return next();
+  if (req.path === '/health' || req.path === '/test-port' || req.path === '/test-db') {
+    return next();
+  }
 
-  if (mongoose.connection.readyState === 0) {
+  // If connection is not active (0 = disconnected, 2 = connecting), await connection
+  if (mongoose.connection.readyState !== 1) {
+    try {
+      await connectDB();
+    } catch (err) {
+      // Caught and recorded in db.js
+    }
+  }
+
+  if (mongoose.connection.readyState !== 1) {
     const details = getConnectionDetails();
     return res.status(503).json({
       success: false,
       message: 'Database connection is offline.',
-      reason: details.lastError || 'Cannot connect to MongoDB cluster.',
+      reason: details.lastError || 'Cannot connect to MongoDB Atlas cluster.',
       hasEnvConfigured: details.hasEnvUri,
       targetAttempted: details.attemptedUri,
     });
