@@ -3,6 +3,7 @@ const cors = require('cors');
 const path = require('path');
 const dotenv = require('dotenv');
 const mongoose = require('mongoose');
+const net = require('net');
 const { connectDB, getConnectionDetails } = require('./config/db');
 
 // Load environment variables (support root, app dir, and cwd)
@@ -55,10 +56,48 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Port test endpoint to verify if the web host firewall allows outbound port 27017
+app.get('/api/test-port', (req, res) => {
+  const host = 'ac-hfknabi-shard-00-00.wsweyz2.mongodb.net';
+  const port = 27017;
+  const socket = new net.Socket();
+  socket.setTimeout(5000);
+
+  socket.on('connect', () => {
+    socket.destroy();
+    res.json({
+      success: true,
+      port27017Open: true,
+      message: 'TCP Port 27017 is OPEN on your hosting server! Your hosting firewall is NOT blocking MongoDB Atlas.',
+    });
+  });
+
+  socket.on('timeout', () => {
+    socket.destroy();
+    res.status(504).json({
+      success: false,
+      port27017Open: false,
+      message: 'TIMEOUT: Your web hosting firewall (CSF/iptables) is BLOCKING outbound TCP port 27017! Contact your hosting support to unblock port 27017.',
+    });
+  });
+
+  socket.on('error', (err) => {
+    socket.destroy();
+    res.status(502).json({
+      success: false,
+      port27017Open: false,
+      error: err.message,
+      message: 'CONNECTION REFUSED/BLOCKED: Your web hosting provider is blocking outbound connections on port 27017.',
+    });
+  });
+
+  socket.connect(port, host);
+});
+
 // Middleware to prevent buffering timeouts when database is not connected
 app.use('/api', (req, res, next) => {
-  // Allow health endpoint regardless of DB status
-  if (req.path === '/health') return next();
+  // Allow diagnostic endpoints regardless of DB status
+  if (req.path === '/health' || req.path === '/test-port') return next();
 
   if (mongoose.connection.readyState === 0) {
     const details = getConnectionDetails();
@@ -85,6 +124,7 @@ app.get('/', (req, res) => {
     message: 'Welcome to MLTify API - Simplifying Lab Learning for MLT Students',
     docs: {
       health: '/api/health',
+      testPort: '/api/test-port',
       subjects: '/api/subjects',
       resources: '/api/resources',
       admin: '/api/admin/stats',
