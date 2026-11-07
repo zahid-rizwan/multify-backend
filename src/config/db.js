@@ -1,40 +1,24 @@
 const mongoose = require('mongoose');
-const dns = require('dns');
-
-// Fix for Node.js SRV resolution on cloud/Linux hosting providers
-try {
-  dns.setServers(['8.8.8.8', '1.1.1.1']);
-} catch (err) {
-  // Ignore if custom dns setServers is restricted
-}
 
 let isConnected = false;
 let lastError = null;
 let connectionAttemptedUri = null;
 
-// Fallback to Atlas Cluster if server environment variables were not passed by the host
-const ATLAS_FALLBACK = 'mongodb+srv://zahidibnrizwan_db_user:3f5C80qDCJBZVv6i@cluster0.wsweyz2.mongodb.net/mltify?retryWrites=true&w=majority';
-
-const normalizeMongoUri = (uri) => {
-  const target = uri || ATLAS_FALLBACK;
-  let cleanUri = target.trim();
-  // If Atlas URI ends with .mongodb.net without database name
-  if (cleanUri.includes('.mongodb.net') && !cleanUri.includes('.mongodb.net/')) {
-    cleanUri = cleanUri.replace('.mongodb.net', '.mongodb.net/mltify?retryWrites=true&w=majority');
-  } else if (cleanUri.endsWith('.mongodb.net/')) {
-    cleanUri = `${cleanUri}mltify?retryWrites=true&w=majority`;
-  }
-  return cleanUri;
-};
-
 const connectDB = async () => {
-  const rawUri = process.env.MONGODB_URI;
-  const uri = normalizeMongoUri(rawUri);
+  const uri = process.env.MONGODB_URI;
+
+  if (!uri) {
+    isConnected = false;
+    lastError = 'MONGODB_URI environment variable is not defined in .env';
+    console.error(`\n❌ [MLTify Error] ${lastError}`);
+    return false;
+  }
+
   connectionAttemptedUri = uri.replace(/:([^@]+)@/, ':****@');
 
   try {
     const conn = await mongoose.connect(uri, {
-      serverSelectionTimeoutMS: 5000,
+      serverSelectionTimeoutMS: 8000,
       connectTimeoutMS: 10000,
     });
 

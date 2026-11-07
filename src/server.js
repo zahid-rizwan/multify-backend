@@ -10,7 +10,7 @@ dotenv.config({ path: path.join(__dirname, '../.env') });
 dotenv.config();
 
 console.log(`[MLTify] Initializing backend...`);
-console.log(`[MLTify] MONGODB_URI detected: ${process.env.MONGODB_URI ? 'YES' : 'Using Atlas fallback'}`);
+console.log(`[MLTify] MONGODB_URI detected: ${process.env.MONGODB_URI ? 'YES' : 'NO (Missing MONGODB_URI in .env)'}`);
 
 const app = express();
 const PORT = process.env.PORT || 5000;
