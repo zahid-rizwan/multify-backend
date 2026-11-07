@@ -8,6 +8,9 @@ const connectDB = require('./config/db');
 // Load environment variables
 dotenv.config();
 
+console.log(`[MLTify] Initializing backend...`);
+console.log(`[MLTify] MONGODB_URI detected: ${process.env.MONGODB_URI ? 'YES' : 'NO (Check .env file on server!)'}`);
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
