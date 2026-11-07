@@ -5,11 +5,12 @@ const dotenv = require('dotenv');
 const mongoose = require('mongoose');
 const { connectDB, getConnectionDetails } = require('./config/db');
 
-// Load environment variables
+// Load environment variables (support root, app dir, and cwd)
+dotenv.config({ path: path.join(__dirname, '../.env') });
 dotenv.config();
 
 console.log(`[MLTify] Initializing backend...`);
-console.log(`[MLTify] MONGODB_URI detected: ${process.env.MONGODB_URI ? 'YES' : 'NO (Check .env file on server!)'}`);
+console.log(`[MLTify] MONGODB_URI detected: ${process.env.MONGODB_URI ? 'YES' : 'Using Atlas fallback'}`);
 
 const app = express();
 const PORT = process.env.PORT || 5000;

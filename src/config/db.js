@@ -12,9 +12,12 @@ let isConnected = false;
 let lastError = null;
 let connectionAttemptedUri = null;
 
+// Fallback to Atlas Cluster if server environment variables were not passed by the host
+const ATLAS_FALLBACK = 'mongodb+srv://zahidibnrizwan_db_user:3f5C80qDCJBZVv6i@cluster0.wsweyz2.mongodb.net/mltify?retryWrites=true&w=majority';
+
 const normalizeMongoUri = (uri) => {
-  if (!uri) return 'mongodb://127.0.0.1:27017/mltify';
-  let cleanUri = uri.trim();
+  const target = uri || ATLAS_FALLBACK;
+  let cleanUri = target.trim();
   // If Atlas URI ends with .mongodb.net without database name
   if (cleanUri.includes('.mongodb.net') && !cleanUri.includes('.mongodb.net/')) {
     cleanUri = cleanUri.replace('.mongodb.net', '.mongodb.net/mltify?retryWrites=true&w=majority');
