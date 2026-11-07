@@ -94,10 +94,53 @@ app.get('/api/test-port', (req, res) => {
   socket.connect(port, host);
 });
 
+// Diagnostic endpoint to inspect raw MongoDB connection error from driver
+app.get('/api/test-db', async (req, res) => {
+  const uri = process.env.MONGODB_URI;
+  if (!uri) {
+    return res.status(500).json({ error: 'MONGODB_URI is not set in process.env' });
+  }
+
+  try {
+    const conn = await mongoose.connect(uri, {
+      serverSelectionTimeoutMS: 8000,
+      connectTimeoutMS: 10000,
+    });
+    res.json({
+      success: true,
+      message: 'MongoDB connected successfully from this request!',
+      host: conn.connection.host,
+      name: conn.connection.name,
+      readyState: conn.connection.readyState,
+    });
+  } catch (err) {
+    const serverDetails = [];
+    if (err.reason && err.reason.servers) {
+      err.reason.servers.forEach((desc, server) => {
+        serverDetails.push({
+          server,
+          type: desc.type,
+          error: desc.error ? desc.error.message : null,
+          code: desc.error ? desc.error.code : null,
+          wireVersion: desc.wireVersion,
+        });
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      errorName: err.name,
+      errorMessage: err.message,
+      topologyType: err.reason ? err.reason.type : null,
+      serverDetails,
+    });
+  }
+});
+
 // Middleware to prevent buffering timeouts when database is not connected
 app.use('/api', (req, res, next) => {
   // Allow diagnostic endpoints regardless of DB status
-  if (req.path === '/health' || req.path === '/test-port') return next();
+  if (req.path === '/health' || req.path === '/test-port' || req.path === '/test-db') return next();
 
   if (mongoose.connection.readyState === 0) {
     const details = getConnectionDetails();
