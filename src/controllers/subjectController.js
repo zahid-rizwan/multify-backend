@@ -6,7 +6,7 @@ const Resource = require('../models/Resource');
 // @access  Public
 exports.getSubjects = async (req, res) => {
   try {
-    const subjects = await Subject.find().sort({ semester: 1, name: 1 });
+    const subjects = await Subject.find().sort({ name: 1 });
 
     // Aggregate resource counts for each subject
     const counts = await Resource.aggregate([
@@ -94,10 +94,10 @@ exports.createSubject = async (req, res) => {
   try {
     const { name, code, semester, description, icon, color } = req.body;
 
-    if (!name || !code || !semester) {
+    if (!name || !code) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide subject name, code, and semester',
+        message: 'Please provide subject name and code',
       });
     }
 
@@ -112,7 +112,7 @@ exports.createSubject = async (req, res) => {
     const subject = await Subject.create({
       name,
       code,
-      semester,
+      semester: semester ? Number(semester) : undefined,
       description,
       icon: icon || 'microscope',
       color: color || '#00828A',
@@ -127,6 +127,44 @@ exports.createSubject = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to create subject',
+      error: error.message,
+    });
+  }
+};
+
+// @desc    Delete subject
+// @route   DELETE /api/subjects/:id
+// @access  Admin
+exports.deleteSubject = async (req, res) => {
+  try {
+    const subject = await Subject.findById(req.params.id);
+    if (!subject) {
+      return res.status(404).json({
+        success: false,
+        message: 'Subject not found',
+      });
+    }
+
+    // Check if resources are linked to this subject
+    const linkedResourcesCount = await Resource.countDocuments({ subject: req.params.id });
+    if (linkedResourcesCount > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot delete subject: ${linkedResourcesCount} resource(s) are still attached to this subject. Please delete or reassign those resources first.`,
+      });
+    }
+
+    await Subject.findByIdAndDelete(req.params.id);
+
+    res.json({
+      success: true,
+      message: 'Subject deleted successfully',
+      deletedId: req.params.id,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete subject',
       error: error.message,
     });
   }

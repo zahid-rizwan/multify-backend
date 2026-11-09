@@ -22,7 +22,7 @@ const resourceSchema = new mongoose.Schema(
     },
     semester: {
       type: Number,
-      required: [true, 'Semester (1-8) is required'],
+      required: false,
       min: 1,
       max: 8,
     },

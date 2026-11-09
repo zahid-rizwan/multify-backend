@@ -260,10 +260,10 @@ exports.uploadResource = async (req, res) => {
       tags,
     } = req.body;
 
-    if (!title || !subject || !docType || !semester || !year) {
+    if (!title || !subject || !docType || !year) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide Title, Subject, Document Type (PYQ/NOTE), Semester, and Year.',
+        message: 'Please provide Title, Subject, Document Type (PYQ/NOTE), and Year.',
       });
     }
 
@@ -298,7 +298,7 @@ exports.uploadResource = async (req, res) => {
       title,
       subject,
       docType: docType.toUpperCase(),
-      semester: Number(semester),
+      semester: semester ? Number(semester) : undefined,
       year: Number(year),
       session: session || 'Annual Exam',
       description: description || '',
@@ -353,7 +353,7 @@ exports.updateResource = async (req, res) => {
     if (title) resource.title = title;
     if (subject) resource.subject = subject;
     if (docType) resource.docType = docType.toUpperCase();
-    if (semester) resource.semester = Number(semester);
+    if (semester !== undefined) resource.semester = semester ? Number(semester) : undefined;
     if (year) resource.year = Number(year);
     if (session) resource.session = session;
     if (description !== undefined) resource.description = description;

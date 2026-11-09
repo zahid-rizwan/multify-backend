@@ -16,7 +16,7 @@ const subjectSchema = new mongoose.Schema(
     },
     semester: {
       type: Number,
-      required: [true, 'Semester number (1-8) is required'],
+      required: false,
       min: 1,
       max: 8,
     },
